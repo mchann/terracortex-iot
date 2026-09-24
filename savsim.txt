@@ -1,0 +1,75 @@
+import time
+import random
+import json
+import paho.mqtt.client as mqtt
+
+# --- KONFIGURASI MQTT ---
+MQTT_BROKER = "test.mosquitto.org"
+MQTT_PORT = 1883
+MQTT_TOPIC = "terracortex/telemetry"
+
+# Inisialisasi MQTT Client
+mqtt_client = mqtt.Client(client_id="terracortex_python_simulator")
+
+try:
+    mqtt_client.connect(MQTT_BROKER, MQTT_PORT, keepalive=60)
+    mqtt_client.loop_start()
+    print(f"[INFO] Berhasil terhubung ke MQTT Broker: {MQTT_BROKER}")
+except Exception as e:
+    print(f"[ERROR] Gagal terhubung ke broker MQTT: {e}")
+
+print("=== TERRACOTEX JSON TELEMETRY STREAM & MQTT PUBLISHER ===")
+
+try:
+    while True:
+        # Simulasi pembacaan sensor
+        im_vibration = round(random.uniform(0.5, 3.5), 2)
+        pressure = round(random.uniform(120.0, 290.0), 1)
+        temp = round(random.uniform(65.0, 85.0), 1)
+        
+        # Logika sederhana penentuan status
+        if pressure > 250 or im_vibration > 2.5:
+            soil_status = "HARD_ROCK"
+            stress = "ELEVATED_STRESS"
+            action = "Kurangi kecepatan dorong bucket!"
+        else:
+            soil_status = "NORMAL_SOFT"
+            stress = "NORMAL"
+            action = "Status operasional aman."
+            
+        # Membungkus data ke dalam format dictionary Python
+        payload = {
+            "device_id": "terracortex_unit_01",
+            "timestamp": int(time.time()),
+            "sensors": {
+                "imu_vibration": im_vibration,
+                "hydraulic_pressure_bar": pressure,
+                "oil_temperature_c": temp
+            },
+            "cortex_inference": {
+                "soil_strata": soil_status,
+                "machine_stress_status": stress,
+                "action_advisory": action
+            }
+        }
+        
+        # Konversi ke string JSON
+        payload_json_str = json.dumps(payload, indent=2)
+        
+        # Kirim data secara live ke MQTT Broker agar dibaca temanmu
+        mqtt_client.publish(MQTT_TOPIC, json.dumps(payload))
+        
+        # Cetak sebagai string JSON yang rapi di terminalmu
+        print(payload_json_str)
+        print("-" * 40)
+        
+        time.sleep(3)
+        
+except KeyboardInterrupt:
+    print("\nStream data dihentikan.")
+    mqtt_client.loop_stop()
+    mqtt_client.disconnect()
+
+
+
+    
