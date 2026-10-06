@@ -158,12 +158,32 @@ def process_telemetry_payload(json_payload, mqtt_client):
             "cavitation_hz": cavitation_hz
         }
         mqtt_client.publish("terracortex/ai_results", json.dumps(hasil_ai))
+        
+        # --- AGENTIC CLOSED-LOOP ACTION ---
+        # Jika ada anomali atau DTC kritis, AI langsung mengambil alih kendali (Agent Override)
+        dtc_code = data.get("dtc_code", "0x00")
+        if is_anomaly or dtc_code != "0x00":
+            print(f"⚠️ [AGENT ACTION] Sending Override Command to {device_id}! Reason: Anomaly or DTC {dtc_code}")
+            command_payload = {
+                "action": "limit_rpm",
+                "limit_rpm": 1300,
+                "trigger_alarm": True
+            }
+            mqtt_client.publish("terracortex/command", json.dumps(command_payload))
+        else:
+            # Jika normal, bebaskan limit RPM dan matikan alarm
+            command_payload = {
+                "action": "release",
+                "limit_rpm": -1,
+                "trigger_alarm": False
+            }
+            mqtt_client.publish("terracortex/command", json.dumps(command_payload))
 
     except Exception as err:
         print(f"[ERROR] An error occurred while processing data: {err}")
 
 # --- MQTT CONNECTION TO WOKWI ---
-MQTT_SERVER = "test.mosquitto.org"
+MQTT_SERVER = "broker.hivemq.com"
 MQTT_TOPIC = "terracortex/telemetry"
 
 def on_message(client, userdata, msg):
