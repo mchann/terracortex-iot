@@ -23,9 +23,11 @@ except Exception as e:
     print(f"[ERROR] Gagal terhubung ke broker MQTT: {e}")
 
 # --- 2. LOAD MODEL ONNX ---
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+weights_dir = os.path.join(BASE_DIR, "weights")
 try:
-    classifier_session = ort.InferenceSession("weights/workload_classifier.onnx")
-    autoencoder_session = ort.InferenceSession("weights/hydraulic_autoencoder.onnx")
+    classifier_session = ort.InferenceSession(os.path.join(weights_dir, "workload_classifier.onnx"))
+    autoencoder_session = ort.InferenceSession(os.path.join(weights_dir, "hydraulic_autoencoder.onnx"))
     print("[INFO] Model ONNX (Classifier & Autoencoder) berhasil dimuat!\n" + "="*50)
 except Exception as e:
     print(f"[ERROR] Gagal memuat model ONNX: {e}")

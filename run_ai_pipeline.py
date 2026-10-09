@@ -1,4 +1,5 @@
 import os
+import time
 import json
 import numpy as np
 import onnxruntime as ort
@@ -6,16 +7,36 @@ import paho.mqtt.client as mqtt
 
 print("=== TERRACOTEX AI CORTEX PIPELINE ACTIVE ===")
 
+# Global active MQTT clients for dual-broker broadcasting (Wokwi cloud + Localhost dashboard)
+active_clients = []
+
+# Device State Accumulator for Cumulative Fatigue Tracking
+device_stress_state = {}
+
+def broadcast_publish(topic, payload_str, fallback_client=None):
+    if active_clients:
+        for c in active_clients:
+            try:
+                c.publish(topic, payload_str)
+            except Exception:
+                pass
+    elif fallback_client:
+        try:
+            fallback_client.publish(topic, payload_str)
+        except Exception:
+            pass
+
 # 1. Load ONNX Models from the weights/ directory
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+weights_dir = os.path.join(BASE_DIR, "weights")
 try:
-    classifier_session = ort.InferenceSession("weights/workload_classifier.onnx")
-    autoencoder_session = ort.InferenceSession("weights/hydraulic_autoencoder.onnx")
+    classifier_session = ort.InferenceSession(os.path.join(weights_dir, "workload_classifier.onnx"))
+    autoencoder_session = ort.InferenceSession(os.path.join(weights_dir, "hydraulic_autoencoder.onnx"))
     print("[INFO] Models workload_classifier & hydraulic_autoencoder successfully loaded!")
 except Exception as e:
     print(f"[ERROR] Failed to load ONNX models: {e}")
 
-# --- SETUP UNTUK BESOK (Bagian 1): Tambahkan parameter mqtt_client di sini ---
-def process_telemetry_payload(json_payload, mqtt_client):
+def process_telemetry_payload(json_payload, mqtt_client=None):
     try:
         # Parse incoming JSON payload
         data = json.loads(json_payload)
@@ -104,14 +125,41 @@ def process_telemetry_payload(json_payload, mqtt_client):
         else:
             advisory = "Normal operation, maintain course."
 
-        # --- Generate CMSI Score & Cavitation Hz ---
-        # CMSI Score: Critical Machine Safety Index (0-100)
+        # --- Generate Dynamic Cumulative CMSI Score (Fatigue & Thermal Inertia) ---
+        # 1. Target Stress Sesaat berdasarkan load & anomali
         if is_anomaly or boom_pressure >= 285.0:
-            # High pressure range: 91-96 score
-            cmsi_score = int(np.clip(85 + (boom_pressure - 285) / 10, 91, 96))
+            target_cmsi = float(np.clip(88.0 + (boom_pressure - 285.0) / 7.0, 91.0, 96.0))
+        elif boom_pressure >= 240.0:
+            target_cmsi = float(65.0 + (boom_pressure - 240.0) * 0.45)
         else:
-            # Normal range: 25-65 score
-            cmsi_score = int(np.clip(25 + (boom_pressure - 120) / 3, 25, 65))
+            target_cmsi = float(np.clip(25.0 + (boom_pressure - 120.0) / 3.0, 25.0, 58.0))
+
+        # 2. State Akumulasi Perangkat
+        if device_id not in device_stress_state:
+            device_stress_state[device_id] = {
+                'current_cmsi': float(target_cmsi if target_cmsi < 65.0 else 45.0),
+                'overload_ticks': 0
+            }
+
+        state = device_stress_state[device_id]
+        current_val = state['current_cmsi']
+
+        # 3. Dynamic Attack / Release (Naik bertahap saat disiksa, turun bertahap saat rileks)
+        if target_cmsi > current_val:
+            # Penahanan tuas di zona beban tinggi -> Akumulasi fatigue bertahap (~8-10 detik)
+            # Merangkak perlahan: 45 -> 60 -> 70 -> 77 -> 82 -> 86 -> 90 -> 94
+            step_up = max(4.0, (target_cmsi - current_val) * 0.30)
+            current_val = min(target_cmsi, current_val + step_up)
+            state['overload_ticks'] += 1
+        else:
+            # Tuas dinormalkan -> Disipasi panas & pendinginan fatigue secara bertahap (~8-10 detik)
+            # Menurun perlahan: 94 -> 82 -> 73 -> 66 -> 60 -> 53 -> 45
+            step_down = max(3.5, (current_val - target_cmsi) * 0.25)
+            current_val = max(target_cmsi, current_val - step_down)
+            state['overload_ticks'] = max(0, state['overload_ticks'] - 1)
+
+        state['current_cmsi'] = current_val
+        cmsi_score = int(round(current_val))
         
         # Cavitation frequency detection
         cavitation_hz = 142 if is_anomaly else int(np.clip(15 + imu_vibe * 5, 10, 25))
@@ -144,9 +192,9 @@ def process_telemetry_payload(json_payload, mqtt_client):
             }
         }
         
-        # Publish JSON lengkap ke dashboard
-        mqtt_client.publish("terracortex/dashboard", json.dumps(complete_payload))
-        print("-> [SUCCESS] Complete payload sent to 'terracortex/dashboard'!")
+        # Publish JSON lengkap ke dashboard (Broadcast ke Wokwi & Localhost Web Dashboard)
+        broadcast_publish("terracortex/dashboard", json.dumps(complete_payload), mqtt_client)
+        print("-> [SUCCESS] Complete payload broadcasted to 'terracortex/dashboard'!")
         
         # Keep backward compatibility - kirim juga ke ai_results
         hasil_ai = {
@@ -158,7 +206,7 @@ def process_telemetry_payload(json_payload, mqtt_client):
             "cmsi_score": cmsi_score,
             "cavitation_hz": cavitation_hz
         }
-        mqtt_client.publish("terracortex/ai_results", json.dumps(hasil_ai))
+        broadcast_publish("terracortex/ai_results", json.dumps(hasil_ai), mqtt_client)
         
         # --- AGENTIC CLOSED-LOOP ACTION ---
         # Jika ada anomali atau DTC kritis, AI langsung mengambil alih kendali (Agent Override)
@@ -170,7 +218,7 @@ def process_telemetry_payload(json_payload, mqtt_client):
                 "limit_rpm": 1300,
                 "trigger_alarm": True
             }
-            mqtt_client.publish("terracortex/command", json.dumps(command_payload))
+            broadcast_publish("terracortex/command", json.dumps(command_payload), mqtt_client)
         else:
             # Jika normal, bebaskan limit RPM dan matikan alarm
             command_payload = {
@@ -178,34 +226,72 @@ def process_telemetry_payload(json_payload, mqtt_client):
                 "limit_rpm": -1,
                 "trigger_alarm": False
             }
-            mqtt_client.publish("terracortex/command", json.dumps(command_payload))
+            broadcast_publish("terracortex/command", json.dumps(command_payload), mqtt_client)
 
     except Exception as err:
         print(f"[ERROR] An error occurred while processing data: {err}")
 
-# --- MQTT CONNECTION TO WOKWI ---
-MQTT_SERVER = os.environ.get("MQTT_BROKER", "localhost")
+# --- DUAL-BROKER MQTT CONFIGURATION (Wokwi & Localhost) ---
+WOKWI_BROKER = os.environ.get("WOKWI_BROKER", "test.mosquitto.org")
+LOCAL_BROKER = os.environ.get("LOCAL_BROKER", os.environ.get("MQTT_BROKER", "localhost"))
 MQTT_TOPIC = "terracortex/telemetry"
 
 def on_message(client, userdata, msg):
     try:
+        broker_tag = userdata or "MQTT"
         payload_str = msg.payload.decode('utf-8')
-        # --- SETUP UNTUK BESOK (Bagian 3): Oper variabel client ke dalam fungsi ---
+        print(f"\n[RECEIVED via {broker_tag}] topic: '{msg.topic}'")
         process_telemetry_payload(payload_str, client)
     except Exception as e:
         print(f"[MQTT ERROR]: {e}")
 
 if __name__ == "__main__":
-    client = mqtt.Client()
-    client.on_message = on_message
-    
-    print(f"\nConnecting to MQTT broker ({MQTT_SERVER}) on topic '{MQTT_TOPIC}'...")
+    def connect_broker(broker_host, broker_name):
+        try:
+            if hasattr(mqtt, "CallbackAPIVersion"):
+                cli = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, userdata=broker_name)
+            else:
+                cli = mqtt.Client(userdata=broker_name)
+            cli.on_message = on_message
+            print(f"Connecting to {broker_name} broker ({broker_host}:1883)...")
+            cli.connect(broker_host, 1883, 60)
+            cli.subscribe(MQTT_TOPIC)
+            cli.loop_start()
+            active_clients.append(cli)
+            print(f"-> [OK] Connected to {broker_name} ({broker_host}) & subscribed to '{MQTT_TOPIC}'")
+            return cli
+        except Exception as e:
+            print(f"-> [WARNING] Gagal terhubung ke {broker_name} ({broker_host}): {e}")
+            return None
+
+    # 1. Hubungkan ke Wokwi Broker (test.mosquitto.org)
+    connect_broker(WOKWI_BROKER, "Wokwi")
+
+    # 2. Hubungkan ke Localhost Broker (jika beda host) untuk integrasi Web Dashboard & simulator lokal
+    if LOCAL_BROKER != WOKWI_BROKER:
+        connect_broker(LOCAL_BROKER, "Localhost")
+
+    if not active_clients:
+        print("\n[FATAL] Tidak ada broker MQTT yang berhasil terhubung!")
+        exit(1)
+
+    print("\n==================================================")
+    print("🚀 TERRACOTEX AI CORTEX PIPELINE ACTIVE (DUAL-BROKER)")
+    print(f"   📡 Wokwi Cloud Broker : {WOKWI_BROKER}")
+    print(f"   💻 Localhost Broker   : {LOCAL_BROKER}")
+    print(f"   📥 Subscribed Topic   : '{MQTT_TOPIC}'")
+    print(f"   📤 Broadcast Topics   : 'terracortex/dashboard', 'terracortex/command'")
+    print("==================================================")
+    print("Menunggu pergerakan tuas Wokwi atau simulator...")
+
     try:
-        client.connect(MQTT_SERVER, 1883, 60)
-        client.subscribe(MQTT_TOPIC)
-        print("Successfully connected! Waiting for live Wokwi lever movements...")
-        client.loop_forever()
+        while True:
+            time.sleep(1)
     except KeyboardInterrupt:
         print("\nAI Pipeline stopped by user.")
-    except Exception as e:
-        print(f"Failed to connect to MQTT broker: {e}")
+        for cli in active_clients:
+            try:
+                cli.loop_stop()
+                cli.disconnect()
+            except Exception:
+                pass
