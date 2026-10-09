@@ -1,3 +1,4 @@
+import os
 import json
 import numpy as np
 import onnxruntime as ort
@@ -183,7 +184,7 @@ def process_telemetry_payload(json_payload, mqtt_client):
         print(f"[ERROR] An error occurred while processing data: {err}")
 
 # --- MQTT CONNECTION TO WOKWI ---
-MQTT_SERVER = "broker.hivemq.com"
+MQTT_SERVER = os.environ.get("MQTT_BROKER", "test.mosquitto.org")
 MQTT_TOPIC = "terracortex/telemetry"
 
 def on_message(client, userdata, msg):
