@@ -1,3 +1,4 @@
+import os
 import time
 import random
 import json
@@ -8,7 +9,7 @@ import paho.mqtt.client as mqtt
 print("=== TERRACOTEX INTEGRATED SIMULATOR & AI CORTEX ===")
 
 # --- 1. KONFIGURASI MQTT ---
-MQTT_BROKER = "test.mosquitto.org"
+MQTT_BROKER = os.environ.get("MQTT_BROKER", "localhost")
 MQTT_PORT = 1883
 MQTT_TOPIC = "terracortex/telemetry"
 

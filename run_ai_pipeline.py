@@ -184,7 +184,7 @@ def process_telemetry_payload(json_payload, mqtt_client):
         print(f"[ERROR] An error occurred while processing data: {err}")
 
 # --- MQTT CONNECTION TO WOKWI ---
-MQTT_SERVER = os.environ.get("MQTT_BROKER", "test.mosquitto.org")
+MQTT_SERVER = os.environ.get("MQTT_BROKER", "localhost")
 MQTT_TOPIC = "terracortex/telemetry"
 
 def on_message(client, userdata, msg):
