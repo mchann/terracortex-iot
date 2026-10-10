@@ -36,7 +36,7 @@ except Exception as e:
 SCENARIOS = {
     "1": {
         "name": "Operasi Normal (Tanah Lunak / Soft Soil)",
-        "unit_id": "EX-01",
+        "unit_id": "EX-04",
         "pressure": 180.0,
         "vibration": 1.1,
         "temp": 55.0,
@@ -53,7 +53,7 @@ SCENARIOS = {
     },
     "2": {
         "name": "Beban Berat Batuan Keras (Bukan Kerusakan)",
-        "unit_id": "EX-01",
+        "unit_id": "EX-04",
         "pressure": 285.0,
         "vibration": 2.0,
         "temp": 64.0,
@@ -87,7 +87,7 @@ SCENARIOS = {
     },
     "4": {
         "name": "Radiator Buntu / Suhu Oli Ekstrem Mendidih (Kasus EX-08)",
-        "unit_id": "EX-08",
+        "unit_id": "EX-04",
         "pressure": 200.0,
         "vibration": 1.2,
         "temp": 96.5,
@@ -104,7 +104,7 @@ SCENARIOS = {
     },
     "5": {
         "name": "Katup Pelepas Bergetar / Relief Valve Flutter (Kasus EX-17)",
-        "unit_id": "EX-17",
+        "unit_id": "EX-04",
         "pressure": 342.0,
         "vibration": 3.9,
         "temp": 72.0,
@@ -121,7 +121,7 @@ SCENARIOS = {
     },
     "6": {
         "name": "Gigi Pemutar & Bantalan Aus / Slew Pinion Shock (Kasus EX-12 / EX-33)",
-        "unit_id": "EX-12",
+        "unit_id": "EX-04",
         "pressure": 220.0,
         "vibration": 4.5,
         "temp": 88.5,
@@ -138,7 +138,7 @@ SCENARIOS = {
     },
     "7": {
         "name": "Silinder Bocor Dalam / Internal Bypass Leakage (Kasus EX-27)",
-        "unit_id": "EX-27",
+        "unit_id": "EX-04",
         "pressure": 140.0,
         "vibration": 1.4,
         "temp": 82.0,
@@ -155,7 +155,7 @@ SCENARIOS = {
     },
     "8": {
         "name": "Pompa Utama Rusak Fatal & Stok Gudang Habis (Kasus EX-31)",
-        "unit_id": "EX-31",
+        "unit_id": "EX-04",
         "pressure": 338.0,
         "vibration": 3.8,
         "temp": 85.0,
@@ -172,7 +172,7 @@ SCENARIOS = {
     }
 }
 
-def send_telemetry_sample(pressure, im_vibration, temp, rpm=1400, bucket_angle=45.0, cavitation_hz=25.0, dtc_code="0x00", unit_id="EX-01"):
+def send_telemetry_sample(pressure, im_vibration, temp, rpm=1400, bucket_angle=45.0, cavitation_hz=25.0, dtc_code="0x00", unit_id="EX-04"):
     severity_score = 0.0
     anomaly_score = 0.0
     is_anomaly = False
