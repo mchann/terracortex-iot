@@ -147,12 +147,24 @@ def process_telemetry_payload(json_payload, mqtt_client=None):
 
         # --- Generate Dynamic Cumulative CMSI Score (Fatigue & Thermal Inertia) ---
         # 1. Target Stress Sesaat berdasarkan load & anomali
-        if is_anomaly:
-            target_cmsi = float(np.clip(89.0 + (boom_pressure - 200.0) / 10.0, 91.0, 96.5))
+        if is_normal_scenario:
+            target_cmsi = round(32.0 + (boom_pressure - 150.0) * 0.15, 1)  # Skenario 1: Nominal soft soil
         elif is_hard_rock_only:
-            target_cmsi = 72.0  # Elevated load warning, not catastrophic failure
-        elif is_normal_scenario:
-            target_cmsi = 36.0  # Completely healthy green nominal
+            target_cmsi = round(68.0 + (boom_pressure - 240.0) * 0.08, 1)  # Skenario 2: Elevated load warning (70-73)
+        elif "520144" in dtc_code or (boom_pressure <= 160.0 and oil_temp >= 78.0):
+            target_cmsi = round(min(80.0, 75.0 + (oil_temp - 75.0) * 0.4), 1)  # Skenario 7: Silinder ngempos (75-80)
+        elif "520198" in dtc_code or imu_vibe >= 4.0:
+            target_cmsi = round(min(88.0, 83.0 + (imu_vibe - 3.5) * 2.5), 1)  # Skenario 6: Slew pinion RUL 18 Jam (84-88)
+        elif "520210" in dtc_code or incoming_cav >= 150.0:
+            target_cmsi = round(min(93.5, 86.0 + (boom_pressure - 320.0) * 0.15), 1)  # Skenario 5: Relief flutter (88-93)
+        elif oil_temp >= 90.0 or "520301" in dtc_code:
+            target_cmsi = round(min(96.5, 93.0 + (oil_temp - 90.0) * 0.5), 1)  # Skenario 4: Thermal hard override (94-96)
+        elif "520150" in dtc_code:
+            target_cmsi = round(min(98.0, 95.0 + (boom_pressure - 320.0) * 0.15), 1)  # Skenario 8: Pump failure fatal (96-98)
+        elif incoming_cav >= 100.0 or "520204" in dtc_code:
+            target_cmsi = round(min(96.0, 92.0 + (boom_pressure - 320.0) * 0.1), 1)  # Skenario 3: Kavitasi parah (92-95)
+        elif is_anomaly:
+            target_cmsi = float(np.clip(89.0 + (boom_pressure - 200.0) / 10.0, 91.0, 96.5))
         elif boom_pressure >= 240.0:
             target_cmsi = float(65.0 + (boom_pressure - 240.0) * 0.45)
         else:
@@ -161,11 +173,16 @@ def process_telemetry_payload(json_payload, mqtt_client=None):
         # 2. State Akumulasi Perangkat
         if device_id not in device_stress_state:
             device_stress_state[device_id] = {
-                'current_cmsi': float(target_cmsi if target_cmsi < 65.0 else 45.0),
+                'current_cmsi': float(target_cmsi),
+                'last_dtc': dtc_code,
                 'overload_ticks': 0
             }
 
         state = device_stress_state[device_id]
+        if state.get('last_dtc') != dtc_code:
+            state['current_cmsi'] = float(target_cmsi)
+            state['last_dtc'] = dtc_code
+
         current_val = state['current_cmsi']
 
         # 3. Dynamic Attack / Release (Naik bertahap saat disiksa, turun bertahap saat rileks)

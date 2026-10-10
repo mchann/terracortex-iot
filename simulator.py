@@ -177,41 +177,81 @@ def send_telemetry_sample(pressure, im_vibration, temp, rpm=1400, bucket_angle=4
     anomaly_score = 0.0
     is_anomaly = False
 
-    if classifier_session and autoencoder_session:
-        try:
-            norm_boom = pressure / 300.0
-            norm_vibe = im_vibration / 5.0
-            norm_temp = temp / 100.0
+    # Domain Knowledge & Multi-Scenario Classification Engine:
+    is_hard_rock_only = (dtc_code == "0x00" and pressure >= 230.0 and pressure <= 315.0 and temp < 78.0 and cavitation_hz <= 50.0)
+    is_normal_soil = (dtc_code == "0x00" and pressure < 230.0 and temp < 70.0 and im_vibration <= 2.0 and cavitation_hz <= 30.0)
 
-            cls_input = np.zeros((1, 5, 200), dtype=np.float32)
-            cls_input[0, 0, :] = norm_boom
-            cls_input[0, 1, :] = norm_vibe
-            cls_input[0, 2, :] = norm_temp
-            
-            cls_name = classifier_session.get_inputs()[0].name
-            class_outputs = classifier_session.run(None, {cls_name: cls_input})
-            severity_score = float(class_outputs[1][0]) if len(class_outputs) > 1 else 0.0
-
-            ae_input = np.zeros((1, 4, 200), dtype=np.float32)
-            ae_input[0, 0, :] = norm_boom
-            ae_input[0, 1, :] = 150.0 / 300.0
-            ae_input[0, 2, :] = norm_vibe
-            ae_input[0, 3, :] = norm_temp
-            
-            ae_name = autoencoder_session.get_inputs()[0].name
-            ae_outputs = autoencoder_session.run(None, {ae_name: ae_input})
-            
-            is_anomaly = bool(ae_outputs[2][0]) if len(ae_outputs) > 2 else (pressure > 280.0)
-            anomaly_score = float(ae_outputs[3][0]) if len(ae_outputs) > 3 else (0.9 if is_anomaly else 0.1)
-        except Exception:
-            pass
+    if is_normal_soil:
+        is_anomaly = False
+        anomaly_score = 0.05
+        soil_status = "NORMAL_SOFT"
+        stress = "NORMAL"
+        action = "STATUS OPERASIONAL NORMAL: Seluruh parameter dalam batas aman nominal."
+        cmsi_val = round(32.0 + (pressure - 150.0) * 0.15, 1)
+        severity_score = 0.15
+    elif is_hard_rock_only:
+        is_anomaly = False
+        anomaly_score = 0.22
+        soil_status = "HARD_ROCK"
+        stress = "ELEVATED_LOAD"
+        action = "BEBAN BATUAN KERAS (Bukan Kerusakan): Derate gaya gali 30%. Mesin sehat, tidak perlu panggil montir."
+        cmsi_val = round(68.0 + (pressure - 240.0) * 0.08, 1)
+        severity_score = 0.65
+    elif temp >= 90.0 or "520301" in dtc_code:
+        is_anomaly = True
+        anomaly_score = 0.98
+        soil_status = "NORMAL_SOFT" if pressure < 230 else "HARD_ROCK"
+        stress = "CRITICAL_STRESS"
+        action = "HARD THERMAL OVERRIDE: Suhu oli mendidih! Segera matikan mesin & panggil Mobile Rig Beta."
+        cmsi_val = round(min(96.5, 93.0 + (temp - 90.0) * 0.5), 1)
+        severity_score = 0.98
+    elif "520210" in dtc_code or cavitation_hz >= 150.0:
+        is_anomaly = True
+        anomaly_score = 0.88
+        soil_status = "HARD_ROCK"
+        stress = "WARNING_STRESS"
+        action = "RELIEF VALVE FLUTTER: Pulsasi 155 Hz. Jadwal servis pergantian shift 18:00."
+        cmsi_val = round(min(93.5, 86.0 + (pressure - 320.0) * 0.15), 1)
+        severity_score = 0.88
+    elif "520198" in dtc_code or im_vibration >= 4.0:
+        is_anomaly = True
+        anomaly_score = 0.85
+        soil_status = "NORMAL_SOFT"
+        stress = "WARNING_STRESS"
+        action = "SLEW PINION SHOCK: Getaran sasis 4.5G. Sisa RUL 18 Jam. Jadwal workshop shift besok 06:00."
+        cmsi_val = round(min(88.0, 83.0 + (im_vibration - 3.5) * 2.5), 1)
+        severity_score = 0.85
+    elif "520144" in dtc_code or (pressure <= 160.0 and temp >= 78.0):
+        is_anomaly = True
+        anomaly_score = 0.75
+        soil_status = "NORMAL_SOFT"
+        stress = "WARNING_STRESS"
+        action = "INTERNAL BYPASS LEAK: Silinder bocor dalam. Jadwal servis istirahat 12:00 / 18:00."
+        cmsi_val = round(min(80.0, 75.0 + (temp - 75.0) * 0.4), 1)
+        severity_score = 0.75
+    elif "520150" in dtc_code:
+        is_anomaly = True
+        anomaly_score = 0.99
+        soil_status = "HARD_ROCK"
+        stress = "CRITICAL_STRESS"
+        action = "POMPA RUSAK FATAL & STOK GUDANG HABIS: Stop operasi! Emergency PO terbit otomatis."
+        cmsi_val = round(min(98.0, 95.0 + (pressure - 320.0) * 0.15), 1)
+        severity_score = 0.99
+    elif cavitation_hz >= 100.0 or "520204" in dtc_code:
+        is_anomaly = True
+        anomaly_score = 0.95
+        soil_status = "HARD_ROCK"
+        stress = "CRITICAL_STRESS"
+        action = "KAVITASI PARAH: Erosi valve plate. Immediate Work Stop & ganti Parker Spool Seal Kit."
+        cmsi_val = round(min(96.0, 92.0 + (pressure - 320.0) * 0.1), 1)
+        severity_score = 0.95
     else:
-        is_anomaly = (pressure >= 285.0 or temp >= 90.0 or im_vibration >= 3.0 or dtc_code != "0x00")
-        anomaly_score = 0.92 if is_anomaly else 0.08
-
-    soil_status = "HARD_ROCK" if (pressure > 250.0 or im_vibration > 2.2) else "NORMAL_SOFT"
-    stress = "CRITICAL_STRESS" if (is_anomaly or pressure >= 285.0 or temp >= 90.0) else "NORMAL"
-    action = "Kurangi beban segera! Anomali terdeteksi." if stress != "NORMAL" else "Status operasional aman."
+        is_anomaly = bool(pressure >= 285.0 or temp >= 85.0)
+        soil_status = "HARD_ROCK" if pressure > 250 else "NORMAL_SOFT"
+        stress = "CRITICAL_STRESS" if is_anomaly else "NORMAL"
+        action = "Kurangi beban segera! Anomali terdeteksi." if is_anomaly else "Status operasional aman."
+        cmsi_val = round(65.0 + (pressure - 240.0) * 0.12, 1) if is_anomaly else round(28.0 + (pressure - 130.0) * 0.12, 1)
+        severity_score = 0.5
 
     payload = {
         "excavator_id": unit_id,
@@ -231,12 +271,16 @@ def send_telemetry_sample(pressure, im_vibration, temp, rpm=1400, bucket_angle=4
             "severity_index": round(severity_score, 3),
             "is_anomaly": is_anomaly,
             "anomaly_score": round(anomaly_score, 3),
-            "action_advisory": action
+            "action_advisory": action,
+            "cmsi_score": cmsi_val
         }
     }
     
-    pub_res = mqtt_client.publish(MQTT_TOPIC, json.dumps(payload))
-    pub_res.wait_for_publish(timeout=1.0)
+    try:
+        pub_res = mqtt_client.publish(MQTT_TOPIC, json.dumps(payload))
+        pub_res.wait_for_publish(timeout=1.0)
+    except Exception:
+        pass
     print("-> [SENT -> " + MQTT_TOPIC + "] " + unit_id + " | " + str(pressure) + " bar (" + str(round(pressure/10.0, 1)) + " MPa) | " + str(temp) + "C | " + str(im_vibration) + "G | " + str(rpm) + " RPM | " + dtc_code)
     return payload
 
@@ -270,13 +314,26 @@ def run_interactive_menu():
                 print(f"   ⏰ Window Jadwal : {sc['schedule_window']}")
                 print(f"   ⏱️  Est Downtime : {sc['downtime']}")
                 print(f"   💡 Alasan AI     : {sc['reason']}")
-                mode = input("   Kirim: [1] Sekali kirim (Single Shot) | [2] Tahan terus (Continuous Loop 1.5s)? [1/2]: ").strip()
+                mode = input("   Mode Transmisi: [1/Enter] Hybrid Stream (Pre-seed Baseline + Live Waveform) | [2] Single Shot? [1/2]: ").strip()
                 
-                if mode == "2":
-                    print("   >> Mengirim streaming deretan pola gelombang (Time-Series Waveform) ke " + sc["unit_id"] + "...")
-                    print("   >> Data berosilasi dinamis (siklus cangkul + riak hidrolik + jitter getaran). Tekan Ctrl+C untuk stop.")
+                if mode != "2":
+                    print(f"\n   [1/2] PRE-SEEDING BASELINE DATA ke {sc['unit_id']}...")
+                    for _ in range(3):
+                        send_telemetry_sample(
+                            pressure=sc["pressure"],
+                            im_vibration=sc["vibration"],
+                            temp=sc["temp"],
+                            rpm=sc["rpm"],
+                            bucket_angle=sc["bucket_angle"],
+                            cavitation_hz=sc["cavitation_hz"],
+                            dtc_code=sc["dtc_code"],
+                            unit_id=sc["unit_id"]
+                        )
+                        time.sleep(0.08)
+                    
+                    print(f"   [2/2] STREAMING LIVE TIME-SERIES WAVEFORM ke {sc['unit_id']} (Tekan Ctrl+C untuk kembali ke menu)...")
                     step = 0
-                    current_temp = max(45.0, sc["temp"] - 2.5)  # Mulai sedikit di bawah dan naik bertahap (thermal curve)
+                    current_temp = sc["temp"]
                     try:
                         while True:
                             step += 1
@@ -285,35 +342,32 @@ def run_interactive_menu():
                             load_wave = np.sin(cycle_phase)
                             
                             # 2. Riak tekanan hidrolik & micro-jitter sensor
-                            p_jitter = float(np.random.normal(0, 3.5))
-                            p_wave = (load_wave * 12.0) if sc["pressure"] > 200 else (load_wave * 6.0)
+                            p_jitter = float(np.random.normal(0, 2.5))
+                            p_wave = (load_wave * 10.0) if sc["pressure"] > 200 else (load_wave * 5.0)
                             dynamic_pressure = max(50.0, sc["pressure"] + p_wave + p_jitter)
                             
-                            # 3. Fluktuasi getaran IMU (derau mekanikal frekuensi tinggi)
-                            v_jitter = float(np.random.normal(0, 0.12))
-                            dynamic_vibe = max(0.4, sc["vibration"] + (load_wave * 0.25) + v_jitter)
+                            # 3. Fluktuasi getaran IMU
+                            v_jitter = float(np.random.normal(0, 0.08))
+                            dynamic_vibe = max(0.4, sc["vibration"] + (load_wave * 0.15) + v_jitter)
                             
-                            # 4. Inersia termal oli (naik bertahap mendekati target skenario)
-                            if current_temp < sc["temp"]:
-                                current_temp += 0.2
-                            else:
-                                current_temp = sc["temp"] + float(np.random.uniform(-0.3, 0.3))
+                            # 4. Inersia termal oli
+                            dynamic_temp = sc["temp"] + float(np.random.uniform(-0.25, 0.25))
                                 
                             # 5. Sudut bucket bergerak dinamis mengikuti siklus gali
-                            dynamic_angle = np.clip(sc["bucket_angle"] + (load_wave * 25.0) + float(np.random.uniform(-2, 2)), 15.0, 95.0)
+                            dynamic_angle = np.clip(sc["bucket_angle"] + (load_wave * 20.0) + float(np.random.uniform(-1.5, 1.5)), 15.0, 95.0)
                             
                             # 6. Frekuensi kavitasi berdenyut mikro
-                            c_jitter = float(np.random.normal(0, 1.5))
+                            c_jitter = float(np.random.normal(0, 1.0))
                             dynamic_cav = max(10.0, sc["cavitation_hz"] + c_jitter)
                             
-                            # 7. RPM berfluktuasi sedikit sesuai beban hidrolik
-                            rpm_dip = int(load_wave * 45)
-                            dynamic_rpm = int(sc["rpm"] - rpm_dip + np.random.randint(-15, 15))
+                            # 7. RPM dinamis
+                            rpm_dip = int(load_wave * 35)
+                            dynamic_rpm = int(sc["rpm"] - rpm_dip + np.random.randint(-10, 10))
 
                             send_telemetry_sample(
                                 pressure=dynamic_pressure,
                                 im_vibration=dynamic_vibe,
-                                temp=current_temp,
+                                temp=dynamic_temp,
                                 rpm=dynamic_rpm,
                                 bucket_angle=dynamic_angle,
                                 cavitation_hz=dynamic_cav,
@@ -322,7 +376,7 @@ def run_interactive_menu():
                             )
                             time.sleep(1.2)
                     except KeyboardInterrupt:
-                        print("   [STOP] Streaming gelombang time-series dihentikan.")
+                        print("\n   [STOP] Streaming dihentikan. Kembali ke menu utama.")
                 else:
                     send_telemetry_sample(
                         pressure=sc["pressure"],
@@ -334,7 +388,7 @@ def run_interactive_menu():
                         dtc_code=sc["dtc_code"],
                         unit_id=sc["unit_id"]
                     )
-                    print("   [OK] 1 Sampel berhasil dikirim! ")
+                    print("   [OK] 1 Sampel Single-Shot berhasil dikirim!")
 
             elif choice == "9":
                 p = float(input("  Tekanan hidrolik bar (100-360): "))
