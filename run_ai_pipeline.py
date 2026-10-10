@@ -175,20 +175,39 @@ def process_telemetry_payload(json_payload, mqtt_client=None):
         print(f"    - Recommendation / Advice : {advisory}")
         print("--------------------------------------------------")
 
-        # --- Build Complete JSON sesuai format Arifa ---
+        # --- Synthesize In-Cab Agent Directive ---
+        dtc_code = data.get("dtc_code", "0x00")
+        agent_directive = advisory
+        if oil_temp >= 90.0:
+            agent_directive = "CRITICAL THERMAL SHUTDOWN: Suhu oli > 90°C! Segera matikan pompa hidrolik & hubungi workshop!"
+        elif is_anomaly or boom_pressure >= 285.0 or cmsi_score >= 85:
+            agent_directive = f"DERATE DIGGING ENVELOPE 30%: Batasi gaya serokan pada {soil_strata}. Standby inspeksi Mobile Rig Alpha."
+        elif soil_status == "HARD_ROCK":
+            agent_directive = "ADAPTIVE GUIDANCE: Batasi sudut bucket serokan pada formasi batuan keras."
+
+        rig_dispatched = bool(cmsi_score >= 85 or is_anomaly or oil_temp >= 85.0 or dtc_code != "0x00")
+
+        # --- Build Complete JSON sesuai format Arifa & Tablet In-Cab ---
         complete_payload = {
-            "timestamp": data.get("timestamp", int(np.random.rand() * 1000000)),
+            "timestamp": data.get("timestamp", int(time.time())),
+            "excavator_id": device_id,
             "sensors": {
                 "hydraulic_pressure_bar": round(boom_pressure, 1),
-                "engine_rpm": sensors.get("engine_rpm", 1250) if "sensors" in data else 1250,
-                "bucket_angle": sensors.get("bucket_angle", 35) if "sensors" in data else 35
+                "engine_rpm": int(sensors.get("engine_rpm", 1250) if "sensors" in data else 1250),
+                "bucket_angle": round(float(sensors.get("bucket_angle", 35) if "sensors" in data else 35), 1),
+                "oil_temperature": round(float(oil_temp), 1),
+                "oil_temperature_c": round(float(oil_temp), 1),
+                "imu_vibration": round(float(imu_vibe), 2)
             },
             "cortex_inference": {
                 "soil_strata": soil_strata,
                 "is_anomaly": is_anomaly,
                 "action_advisory": advisory,
+                "agent_directive": agent_directive,
                 "cmsi_score": cmsi_score,
-                "cavitation_hz": cavitation_hz
+                "cavitation_hz": cavitation_hz,
+                "dtc_code": dtc_code,
+                "rig_dispatched": rig_dispatched
             }
         }
         
