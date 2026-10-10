@@ -273,22 +273,56 @@ def run_interactive_menu():
                 mode = input("   Kirim: [1] Sekali kirim (Single Shot) | [2] Tahan terus (Continuous Loop 1.5s)? [1/2]: ").strip()
                 
                 if mode == "2":
-                    print("   >> Mengirim streaming terus-menerus ke " + sc["unit_id"] + "... Tekan Ctrl+C untuk kembali ke menu.")
+                    print("   >> Mengirim streaming deretan pola gelombang (Time-Series Waveform) ke " + sc["unit_id"] + "...")
+                    print("   >> Data berosilasi dinamis (siklus cangkul + riak hidrolik + jitter getaran). Tekan Ctrl+C untuk stop.")
+                    step = 0
+                    current_temp = max(45.0, sc["temp"] - 2.5)  # Mulai sedikit di bawah dan naik bertahap (thermal curve)
                     try:
                         while True:
+                            step += 1
+                            # 1. Siklus kerja excavator (Gelombang sinus digging cycle ~12 detik = 8 langkah)
+                            cycle_phase = (step % 8) / 8.0 * 2.0 * np.pi
+                            load_wave = np.sin(cycle_phase)
+                            
+                            # 2. Riak tekanan hidrolik & micro-jitter sensor
+                            p_jitter = float(np.random.normal(0, 3.5))
+                            p_wave = (load_wave * 12.0) if sc["pressure"] > 200 else (load_wave * 6.0)
+                            dynamic_pressure = max(50.0, sc["pressure"] + p_wave + p_jitter)
+                            
+                            # 3. Fluktuasi getaran IMU (derau mekanikal frekuensi tinggi)
+                            v_jitter = float(np.random.normal(0, 0.12))
+                            dynamic_vibe = max(0.4, sc["vibration"] + (load_wave * 0.25) + v_jitter)
+                            
+                            # 4. Inersia termal oli (naik bertahap mendekati target skenario)
+                            if current_temp < sc["temp"]:
+                                current_temp += 0.2
+                            else:
+                                current_temp = sc["temp"] + float(np.random.uniform(-0.3, 0.3))
+                                
+                            # 5. Sudut bucket bergerak dinamis mengikuti siklus gali
+                            dynamic_angle = np.clip(sc["bucket_angle"] + (load_wave * 25.0) + float(np.random.uniform(-2, 2)), 15.0, 95.0)
+                            
+                            # 6. Frekuensi kavitasi berdenyut mikro
+                            c_jitter = float(np.random.normal(0, 1.5))
+                            dynamic_cav = max(10.0, sc["cavitation_hz"] + c_jitter)
+                            
+                            # 7. RPM berfluktuasi sedikit sesuai beban hidrolik
+                            rpm_dip = int(load_wave * 45)
+                            dynamic_rpm = int(sc["rpm"] - rpm_dip + np.random.randint(-15, 15))
+
                             send_telemetry_sample(
-                                pressure=sc["pressure"],
-                                im_vibration=sc["vibration"],
-                                temp=sc["temp"],
-                                rpm=sc["rpm"],
-                                bucket_angle=sc["bucket_angle"],
-                                cavitation_hz=sc["cavitation_hz"],
+                                pressure=dynamic_pressure,
+                                im_vibration=dynamic_vibe,
+                                temp=current_temp,
+                                rpm=dynamic_rpm,
+                                bucket_angle=dynamic_angle,
+                                cavitation_hz=dynamic_cav,
                                 dtc_code=sc["dtc_code"],
                                 unit_id=sc["unit_id"]
                             )
-                            time.sleep(1.5)
+                            time.sleep(1.2)
                     except KeyboardInterrupt:
-                        print("   [STOP] Streaming skenario dihentikan.")
+                        print("   [STOP] Streaming gelombang time-series dihentikan.")
                 else:
                     send_telemetry_sample(
                         pressure=sc["pressure"],
