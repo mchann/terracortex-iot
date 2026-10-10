@@ -36,7 +36,7 @@ except Exception as e:
 SCENARIOS = {
     "1": {
         "name": "Operasi Normal (Tanah Lunak / Soft Soil)",
-        "unit_id": "XCMG-EX-01",
+        "unit_id": "EX-01",
         "pressure": 180.0,
         "vibration": 1.1,
         "temp": 55.0,
@@ -53,7 +53,7 @@ SCENARIOS = {
     },
     "2": {
         "name": "Beban Berat Batuan Keras (Bukan Kerusakan)",
-        "unit_id": "XCMG-EX-01",
+        "unit_id": "EX-01",
         "pressure": 285.0,
         "vibration": 2.0,
         "temp": 64.0,
@@ -172,7 +172,7 @@ SCENARIOS = {
     }
 }
 
-def send_telemetry_sample(pressure, im_vibration, temp, rpm=1400, bucket_angle=45.0, cavitation_hz=25.0, dtc_code="0x00", unit_id="XCMG-EX-01"):
+def send_telemetry_sample(pressure, im_vibration, temp, rpm=1400, bucket_angle=45.0, cavitation_hz=25.0, dtc_code="0x00", unit_id="EX-01"):
     severity_score = 0.0
     anomaly_score = 0.0
     is_anomaly = False

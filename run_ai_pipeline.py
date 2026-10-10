@@ -50,7 +50,7 @@ def process_telemetry_payload(json_payload, mqtt_client=None):
             oil_temp = sensors.get("oil_temperature_c", 70.0)
             arm_pressure = sensors.get("arm_pressure_bar", 150.0)
         else:
-            device_id = data.get("excavator_id", "XCMG-EX-01")
+            device_id = data.get("excavator_id", "EX-01")
             boom_pressure = data.get("hydraulic_pressure_bar", 200.0)
             imu_vibe = 1.5      
             oil_temp = 75.0     
@@ -161,8 +161,12 @@ def process_telemetry_payload(json_payload, mqtt_client=None):
         state['current_cmsi'] = current_val
         cmsi_score = int(round(current_val))
         
-        # Cavitation frequency detection
-        cavitation_hz = 142 if is_anomaly else int(np.clip(15 + imu_vibe * 5, 10, 25))
+        # Cavitation frequency detection (Preserve deterministic sensor frequency if provided)
+        incoming_cav = sensors.get("cavitation_freq_hz") or sensors.get("cavitation_hz")
+        if incoming_cav is not None and float(incoming_cav) > 0:
+            cavitation_hz = float(incoming_cav)
+        else:
+            cavitation_hz = 142 if is_anomaly else int(np.clip(15 + imu_vibe * 5, 10, 25))
         
         # Simplified soil_strata format (sesuai format Arifa)
         soil_strata = "HARD_ROCK" if (boom_pressure > 250.0 or imu_vibe > 2.2) else "NORMAL_SOFT"
