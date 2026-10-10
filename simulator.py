@@ -45,7 +45,11 @@ SCENARIOS = {
         "cavitation_hz": 20.0,
         "dtc_code": "0x00",
         "soil_strata": "NORMAL_SOFT",
-        "desc": "Kondisi kerja nominal sehat, CMSI stabil rendah (35-45), bar operator hijau."
+        "schedule_type": "🟢 NO SERVICE REQUIRED (Operasi Normal)",
+        "schedule_window": "Sesuai Kalender Rutin (PM 250 / 500 Jam)",
+        "downtime": "0 Jam (Operasi Aktif)",
+        "reason": "Semua sensor berada di safe envelope nominal. CMSI 35-45 (Hijau).",
+        "desc": "Kondisi kerja nominal sehat, CMSI stabil rendah, bar operator hijau."
     },
     "2": {
         "name": "Beban Berat Batuan Keras (Bukan Kerusakan)",
@@ -58,6 +62,10 @@ SCENARIOS = {
         "cavitation_hz": 35.0,
         "dtc_code": "0x00",
         "soil_strata": "HARD_ROCK",
+        "schedule_type": "🟡 TIDAK PERLU SERVICE (Hanya Derate Operasional)",
+        "schedule_window": "Tetap Bekerja (Tanpa Interupsi Jadwal)",
+        "downtime": "0 Jam (Tidak Perlu Bengkel)",
+        "reason": "Murni beban cangkul batuan basalt keras, bukan kerusakan mesin. Operator derate 30% untuk menjaga umur komponen.",
         "desc": "Mencangkul Hard Basalt. CMSI naik ke ~70-75 (Kuning/Warning). Operator cukup derate 30% tanpa perlu panggil montir."
     },
     "3": {
@@ -71,6 +79,10 @@ SCENARIOS = {
         "cavitation_hz": 142.0,
         "dtc_code": "SPN 520204 / FMI 14",
         "soil_strata": "HARD_ROCK",
+        "schedule_type": "🔴 IMMEDIATE WORK STOP REQUIRED (Stop Detik Ini Juga)",
+        "schedule_window": "Sekarang Juga (Immediate Field Dispatch)",
+        "downtime": "2.5 Jam (Mobile Rig Alpha)",
+        "reason": "Kavitasi 142 Hz mengikis valve plate. Jika dipaksakan jalan, serpihan logam akan menyebar ke seluruh sirkuit hidrolik.",
         "desc": "Kavitasi parah 142 Hz. CMSI akumulasi ke >90 (Merah/Kritis). Butuh Parker Spool Valve Seal Kit."
     },
     "4": {
@@ -84,6 +96,10 @@ SCENARIOS = {
         "cavitation_hz": 24.0,
         "dtc_code": "SPN 520301 / FMI 16",
         "soil_strata": "NORMAL_SOFT",
+        "schedule_type": "🔴 IMMEDIATE EMERGENCY SHUTDOWN (Hard Thermal Override)",
+        "schedule_window": "Detik Ini Juga (Idle Darurat & Matikan Mesin)",
+        "downtime": "3.0 Jam (Radiator Flushing & Thermostat)",
+        "reason": "Suhu oli 96.5°C melebihi batas bahaya 90°C. Risiko seal meleleh dan uap oli meledak (flash fire). Wajib stop saat itu juga.",
         "desc": "Tekanan normal, getaran rendah, TAPI SUHU 96.5 C MENDIDIH! Hard Safety Shutdown detik ini juga."
     },
     "5": {
@@ -97,6 +113,10 @@ SCENARIOS = {
         "cavitation_hz": 155.0,
         "dtc_code": "SPN 520210 / FMI 08",
         "soil_strata": "HARD_ROCK",
+        "schedule_type": "🟠 SCHEDULED SHIFT MAINTENANCE (Akhir Shift Pukul 18:00)",
+        "schedule_window": "Pukul 18:00 (Pergantian Shift Malam)",
+        "downtime": "1.5 Jam (Cartridge Replacement)",
+        "reason": "Pulsasi hidrolik 155 Hz hanya terjadi di relief valve saat beban mentok, suhu oli aman (72°C). Operator derate dwell, unit aman selesaikan shift.",
         "desc": "Pulsasi hidrolik 155 Hz pada main relief valve. Butuh Main Relief Valve Cartridge 350-bar."
     },
     "6": {
@@ -110,6 +130,10 @@ SCENARIOS = {
         "cavitation_hz": 138.0,
         "dtc_code": "SPN 520198 / FMI 02",
         "soil_strata": "NORMAL_SOFT",
+        "schedule_type": "🟠 SCHEDULED WORKSHOP SERVICE (Toleransi Sisa 18 Jam / Shift Besok 06:00)",
+        "schedule_window": "Shift Besok Pukul 06:00 (RUL 18 Jam)",
+        "downtime": "4.5 Jam (Pinion Shaft Replacement)",
+        "reason": "Kerusakan pada mekanikal slew pinion (bukan oli hidrolik fatal). RUL 18 jam aman jika swing speed dibatasi 25%. Tidak perlu stop di tengah ritase.",
         "desc": "Tekanan hidrolik normal, tapi getaran sasis IMU 4.5 G ekstrem saat swing. RUL 18 Jam. Butuh Slew Pinion Drive Shaft."
     },
     "7": {
@@ -123,6 +147,10 @@ SCENARIOS = {
         "cavitation_hz": 42.0,
         "dtc_code": "SPN 520144 / FMI 07",
         "soil_strata": "NORMAL_SOFT",
+        "schedule_type": "🟡 SCHEDULED WINDOW MAINTENANCE (Istirahat 12:00 / Akhir Shift 18:00)",
+        "schedule_window": "Pukul 12:00 (Istirahat Siang) atau 18:00",
+        "downtime": "2.0 Jam (Piston Seal Pack Replacement)",
+        "reason": "Hanya kehilangan daya angkat (ngempos), tidak ada getaran tinggi atau bahaya katastropik. Unit dialihkan ke pekerjaan tanah ringan.",
         "desc": "RPM digeber tapi tekanan ngempos (140 bar), oli panas gesekan bocor internal. Butuh Boom Cylinder Piston Seal Pack."
     },
     "8": {
@@ -136,6 +164,10 @@ SCENARIOS = {
         "cavitation_hz": 98.0,
         "dtc_code": "SPN 520150 / FMI 00",
         "soil_strata": "HARD_ROCK",
+        "schedule_type": "🚨 IMMEDIATE WORK STOP & EMERGENCY PROCUREMENT (Stop Sekarang + Auto PO)",
+        "schedule_window": "Detik Ini Juga (Stop Operasi & Kirim Standby Unit)",
+        "downtime": "6.0 Jam (Pengiriman Part Cepat & Ganti Pompa)",
+        "reason": "Pompa di ambang macet total (seizure). Stok gudang 0 unit, Agent otomatis terbitkan Emergency PO ke vendor Parker & alihkan excavator standby.",
         "desc": "Pompa aus berat & stok di gudang 0 unit (Stockout). Agent otomatis terbitkan Emergency Purchase Order (PO-EMG-EX31)."
     }
 }
@@ -215,9 +247,10 @@ def run_interactive_menu():
     print(" PILIH SKENARIO UJI MULTI-SENSOR DETERMINISTIK (NO RANDOM)")
     print(border)
     for k, sc in SCENARIOS.items():
-        print("  [" + k + "] " + sc["name"])
-        print("      -> " + str(sc["pressure"]) + " bar | " + str(sc["temp"]) + "C | " + str(sc["vibration"]) + "G | " + str(sc["rpm"]) + " RPM | " + sc["dtc_code"])
-        print("      -> " + sc["desc"])
+        print(f"  [{k}] {sc['name']} ({sc['unit_id']})")
+        print(f"      📊 Sensor  : {sc['pressure']} bar | {sc['temp']}°C | {sc['vibration']}G | {sc['rpm']} RPM | {sc['cavitation_hz']} Hz | {sc['dtc_code']}")
+        print(f"      ⏱️  Jadwal  : {sc['schedule_type']} -> {sc['schedule_window']} (Est: {sc['downtime']})")
+        print(f"      💡 Alasan  : {sc['reason']}")
     print("  [9] Custom Input Manual (Ketik Sendiri Angkanya)")
     print("  [q] Keluar")
     print("")
@@ -231,7 +264,12 @@ def run_interactive_menu():
             if choice in SCENARIOS:
                 sc = SCENARIOS[choice]
                 print()
-                print(">> Anda memilih: [" + choice + "] " + sc["name"])
+                print(f">> ANDA MEMILIH: [{choice}] {sc['name']}")
+                print(f"   🎯 Target Unit   : {sc['unit_id']}")
+                print(f"   🚨 Urgensi Servis: {sc['schedule_type']}")
+                print(f"   ⏰ Window Jadwal : {sc['schedule_window']}")
+                print(f"   ⏱️  Est Downtime : {sc['downtime']}")
+                print(f"   💡 Alasan AI     : {sc['reason']}")
                 mode = input("   Kirim: [1] Sekali kirim (Single Shot) | [2] Tahan terus (Continuous Loop 1.5s)? [1/2]: ").strip()
                 
                 if mode == "2":
