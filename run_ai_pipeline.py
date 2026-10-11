@@ -203,11 +203,12 @@ def process_telemetry_payload(json_payload, mqtt_client=None):
         cmsi_score = int(round(current_val))
         
         # Cavitation frequency detection (Preserve deterministic sensor frequency if provided)
-        incoming_cav = sensors.get("cavitation_freq_hz") or sensors.get("cavitation_hz")
-        if incoming_cav is not None and float(incoming_cav) > 0:
-            cavitation_hz = float(incoming_cav)
+        raw_cav = sensors.get("cavitation_freq_hz") or sensors.get("cavitation_hz")
+        if raw_cav is not None and float(raw_cav) > 0:
+            cavitation_hz = float(raw_cav)
         else:
             cavitation_hz = 142 if is_anomaly else int(np.clip(15 + imu_vibe * 5, 10, 25))
+        incoming_cav = float(cavitation_hz)
         
         # Simplified soil_strata format (sesuai format Arifa)
         soil_strata = "HARD_ROCK" if (boom_pressure > 250.0 or imu_vibe > 2.2) else "NORMAL_SOFT"
